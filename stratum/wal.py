@@ -6,13 +6,14 @@ from threading import RLock
 class WAL:
 
     def __init__(self, path):
-        self.path = path
-        self.f = open(path,'ab')
+        self.path = path / 'wal.log'
+        self.f = open(str(self.path),'ab')
         self.lock = RLock()
         
 
     def append(self,seq_no, op_type, key, value):
         with self.lock:
+            # 1 - PUT operation, 2 - DELETE operation
             if op_type not in (1,2):
                 raise ValueError(f"Invalid op_type: {op_type}")
             header = struct.pack(">QBII",seq_no, op_type,len(key),len(value))

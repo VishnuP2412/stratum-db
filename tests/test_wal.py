@@ -7,39 +7,39 @@ from stratum.wal import WAL
 
 
 def test_append_and_replay_single_put(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(1, 1, b'key', b'value')
     finally:
         wal.f.close()
 
-    records = list(WAL(str(path)).replay())
+    records = list(WAL(tmp_path).replay())
     assert records == [(1, 1, b'key', b'value')]
 
 
 def test_append_and_replay_single_delete(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(2, 2, b'del-key', b'')
     finally:
         wal.f.close()
 
-    records = list(WAL(str(path)).replay())
+    records = list(WAL(tmp_path).replay())
     assert records == [(2, 2, b'del-key', b'')]
 
 
 def test_replay_empty_file(tmp_path):
-    path = tmp_path / 'wal.log'
-    assert list(WAL(str(path)).replay()) == []
+    
+    assert list(WAL(tmp_path).replay()) == []
 
 
 def test_multiple_entries_replay_order(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(1, 1, b'a', b'one')
@@ -48,7 +48,7 @@ def test_multiple_entries_replay_order(tmp_path):
     finally:
         wal.f.close()
 
-    assert list(WAL(str(path)).replay()) == [
+    assert list(WAL(tmp_path).replay()) == [
         (1, 1, b'a', b'one'),
         (2, 1, b'b', b'two'),
         (3, 2, b'c', b''),
@@ -56,27 +56,27 @@ def test_multiple_entries_replay_order(tmp_path):
 
 
 def test_truncate_removes_entries(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(1, 1, b'foo', b'bar')
     finally:
         wal.f.close()
 
-    wal = WAL(str(path))
+    wal = WAL(tmp_path)
     try:
         wal.truncate()
     finally:
         wal.f.close()
 
-    assert list(WAL(str(path)).replay()) == []
-    assert path.read_bytes() == b''
+    assert list(WAL(tmp_path).replay()) == []
+    assert (tmp_path / 'wal.log').read_bytes() == b''
 
 
 def test_invalid_op_type_raises(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         try:
@@ -89,38 +89,38 @@ def test_invalid_op_type_raises(tmp_path):
 
 
 def test_partial_header_stops_replay(tmp_path):
-    path = tmp_path / 'wal.log'
-    path.write_bytes(b'12345')
-    assert list(WAL(str(path)).replay()) == []
+    
+    (tmp_path / 'wal.log').write_bytes(b'12345')
+    assert list(WAL(tmp_path).replay()) == []
 
 
 def test_partial_body_stops_replay(tmp_path):
-    path = tmp_path / 'wal.log'
+    
     header = struct.pack('>QBII', 1, 1, 4, 5)
     payload = header + b'key'
-    path.write_bytes(payload)
-    assert list(WAL(str(path)).replay()) == []
+    (tmp_path / 'wal.log').write_bytes(payload)
+    assert list(WAL(tmp_path).replay()) == []
 
 
 def test_invalid_crc_stops_replay(tmp_path):
-    path = tmp_path / 'wal.log'
+    
     header = struct.pack('>QBII', 1, 1, 3, 3)
     body = b'keyval'
     bad_crc = struct.pack('>I', 0)
-    path.write_bytes(header + body + bad_crc)
-    assert list(WAL(str(path)).replay()) == []
+    (tmp_path / 'wal.log').write_bytes(header + body + bad_crc)
+    assert list(WAL(tmp_path).replay()) == []
 
 
 def test_record_bytes_match_format(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(42, 1, b'abc', b'defg')
     finally:
         wal.f.close()
 
-    raw = path.read_bytes()
+    raw = (tmp_path / 'wal.log').read_bytes()
     assert len(raw) == 17 + 3 + 4 + 4
 
     header = raw[:17]
@@ -138,8 +138,8 @@ def test_record_bytes_match_format(tmp_path):
 
 
 def test_partial_write_replay_after_random_truncate(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(1, 1, b'a', b'one')
@@ -148,15 +148,15 @@ def test_partial_write_replay_after_random_truncate(tmp_path):
     finally:
         wal.f.close()
 
-    data = path.read_bytes()
+    data = (tmp_path / 'wal.log').read_bytes()
     assert len(data) > 0
 
     # First record is 25 bytes long, second record is also 25 bytes long.
     # Truncate after at least the first record so replay can yield a valid prefix.
     cut = random.randint(26, len(data) - 1)
-    path.write_bytes(data[:cut])
+    (tmp_path / 'wal.log').write_bytes(data[:cut])
 
-    records = list(WAL(str(path)).replay())
+    records = list(WAL(tmp_path).replay())
     assert records in (
         [(1, 1, b'a', b'one')],
         [(1, 1, b'a', b'one'), (2, 1, b'b', b'two')],
@@ -164,8 +164,8 @@ def test_partial_write_replay_after_random_truncate(tmp_path):
 
 
 def test_replay_on_same_open_wal_handle(tmp_path):
-    path = tmp_path / 'wal.log'
-    wal = WAL(str(path))
+    
+    wal = WAL(tmp_path)
 
     try:
         wal.append(1, 1, b'a', b'one')
@@ -176,7 +176,7 @@ def test_replay_on_same_open_wal_handle(tmp_path):
     finally:
         wal.f.close()
 
-    assert list(WAL(str(path)).replay()) == [
+    assert list(WAL(tmp_path).replay()) == [
         (1, 1, b'a', b'one'),
         (2, 1, b'b', b'two'),
     ]
