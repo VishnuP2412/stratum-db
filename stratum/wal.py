@@ -2,10 +2,16 @@ import struct
 import zlib
 import os
 from threading import RLock
+from pathlib import Path
 
 class WAL:
 
     def __init__(self, path):
+        if not isinstance(path, Path):
+            raise TypeError(
+                f"WAL requires a pathlib.Path, got {type(path).__name__}. "
+                f"Wrap it with Path(...) at the call site."
+            )
         self.path = path / 'wal.log'
         self.f = open(str(self.path),'ab')
         self.lock = RLock()

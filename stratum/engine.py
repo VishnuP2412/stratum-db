@@ -1,9 +1,16 @@
 from stratum.memtable import MemTable
 from stratum.wal import WAL
 from threading import RLock
+from pathlib import Path
 
 class Engine:
     def __init__(self, data_dir):
+        if not isinstance(data_dir, Path):
+            raise TypeError(
+                f"WAL requires a pathlib.Path, got {type(data_dir).__name__}. "
+                f"Wrap it with Path(...) at the call site."
+            )
+
         self.memtable = MemTable()
         self.wal = WAL(data_dir)
         self._seq_no = 0

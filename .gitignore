@@ -1,3 +1,9 @@
 .venv/
 wal.log
 temp.py
+data/
+*.log
+tmp_*/
+crash_writer.py
+__pycache__
+data_manual_test/
