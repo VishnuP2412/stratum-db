@@ -9,6 +9,10 @@ class MemTable:
         self.max_size_bytes = max_size_bytes
 
     def put(self, key, value, seq_no, deleted=False):
+        if not isinstance(key, bytes):
+            raise TypeError(f"MemTable requires bytes keys, got {type(key).__name__}")
+        if not isinstance(value, bytes):
+            raise TypeError(f"MemTable requires bytes values, got {type(value).__name__}")
         with self.lock:
             old_record = self.table.get(key)
             if old_record is not None:
@@ -24,6 +28,8 @@ class MemTable:
             self.put(key, b"", seq_no, deleted=True)
 
     def get(self, key):
+        if not isinstance(key, bytes):
+            raise TypeError(f"MemTable requires bytes keys, got {type(key).__name__}")
         with self.lock:
             record = self.table.get(key)
             if record is None:
@@ -32,6 +38,12 @@ class MemTable:
             if deleted:
                 return None
             return value
+
+    def get_record(self, key):
+        if not isinstance(key, bytes):
+            raise TypeError(f"MemTable requires bytes keys, got {type(key).__name__}")
+        with self.lock:
+            return self.table.get(key)
 
     def is_full(self):
         with self.lock:

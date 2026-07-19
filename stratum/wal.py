@@ -18,6 +18,10 @@ class WAL:
         
 
     def append(self,seq_no, op_type, key, value):
+        if not isinstance(key, bytes):
+            raise TypeError(f"WAL requires bytes keys, got {type(key).__name__}")
+        if not isinstance(value, bytes):
+            raise TypeError(f"WAL requires bytes values, got {type(value).__name__}")
         with self.lock:
             # 1 - PUT operation, 2 - DELETE operation
             if op_type not in (1,2):
