@@ -93,6 +93,5 @@ class SSTable:
                 seen_keys.add(key)
 
                 if start_key <= key <= end_key:
-                    if not deleted:
-                        results.append((key, value, seq_no))
+                    results.append((key, value, seq_no, deleted))
         return results

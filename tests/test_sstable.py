@@ -122,7 +122,11 @@ def test_scan_full_range_round_trips_flushed_records(tmp_path):
     sstable = SSTable.flush(path, items)
     result = sstable.scan(b"a", b"z")
 
-    assert result == [(b"a", b"one", 1), (b"b", b"two", 2), (b"c", b"three", 3)]
+    assert result == [
+        (b"a", b"one", 1, 0),
+        (b"b", b"two", 2, 0),
+        (b"c", b"three", 3, 0),
+    ]
 
 
 def test_scan_narrow_range_excludes_out_of_range_entries(tmp_path):
@@ -136,7 +140,7 @@ def test_scan_narrow_range_excludes_out_of_range_entries(tmp_path):
     sstable = SSTable.flush(path, items)
     result = sstable.scan(b"b", b"b")
 
-    assert result == [(b"b", b"two", 2)]
+    assert result == [(b"b", b"two", 2, 0)]
 
 
 def test_scan_omits_deleted_records_in_range(tmp_path):
@@ -150,8 +154,11 @@ def test_scan_omits_deleted_records_in_range(tmp_path):
     sstable = SSTable.flush(path, items)
     result = sstable.scan(b"a", b"z")
 
-    assert all(record[0] != b"b" for record in result)
-    assert result == [(b"a", b"one", 1), (b"c", b"three", 3)]
+    assert result == [
+        (b"a", b"one", 1, 0),
+        (b"b", b"", 2, 1),
+        (b"c", b"three", 3, 0),
+    ]
 
 
 def test_scan_rejects_non_bytes_start_and_end_keys(tmp_path):
@@ -197,6 +204,30 @@ def test_scan_raises_on_duplicate_keys_in_sstable_file(tmp_path):
         sstable.scan(b"a", b"z")
 
 
+def test_sstable_from_file_exists_and_loads_sstable_metadata(tmp_path):
+    path = tmp_path / "load.sst"
+    key = b"alpha"
+    SSTable.flush(path, [(key, (b"value", 1, 0))])
+
+    loaded = SSTable.from_file(path)
+    assert isinstance(loaded, SSTable)
+    assert loaded.min_key == key
+    assert loaded.max_key == key
+
+
+def test_engine_restart_shadowing_prefers_newest_sstable_after_reload(tmp_path):
+    key = b"k"
+    engine1 = Engine(tmp_path)
+    engine1.memtable.max_size_bytes = 1
+
+    engine1.put(key, b"v1")
+    engine1.put(key, b"v2")
+    engine1.write_table()
+
+    engine2 = Engine(tmp_path)
+    assert engine2.get(key) == b"v2"
+
+
 def test_scan_raises_on_truncated_sstable_file(tmp_path):
     path = tmp_path / "truncated.sst"
     key = b"abc"
@@ -220,6 +251,18 @@ def test_scan_raises_on_truncated_sstable_file(tmp_path):
 
     with pytest.raises(ValueError, match="Truncated SSTable"):
         sstable.scan(b"", b"zzz")
+
+
+def test_engine_get_returns_tombstone_value_when_newer_sstable_has_tombstone_and_older_sstable_has_live_value(tmp_path):
+    older = tmp_path / "000000_older.sst"
+    newer = tmp_path / "000001_newer.sst"
+    key = b"k"
+
+    SSTable.flush(older, [(key, (b"old-value", 1, 0))])
+    SSTable.flush(newer, [(key, (b"", 2, 1))])
+
+    engine = Engine(tmp_path)
+    assert engine.get(key) is None, "Deleted key should resolve to None even when an older SSTable contains a live value"
 
 
 # kill-9 tests

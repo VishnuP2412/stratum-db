@@ -87,6 +87,7 @@ class Engine:
                     continue
                 results = sstable.scan(key, key)
                 if results:
-                    return results[0][1]
+                    _, value, _, deleted = results[0]
+                    return None if deleted else value
 
             return None
