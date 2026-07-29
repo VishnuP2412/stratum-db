@@ -8,11 +8,31 @@
 
 from pathlib import Path
 from stratum.engine import Engine
+import os
 
 DATA_DIR = Path("./data_manual_test")   # <-- set to your actual dir from tonight
 LARGE_AT = 500
 LARGE_SIZE_KB = 64
 LAST_GOOD = 501   # <-- your CRC scan already confirmed this
+
+# If the WAL is empty (e.g., first run), generate the required entries.
+wal_path = DATA_DIR / "wal.log"
+if not wal_path.exists() or wal_path.stat().st_size == 0:
+    # Ensure the directory exists
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # Use a fresh Engine to write the expected sequence of entries.
+    generator = Engine(data_dir=DATA_DIR)
+    # Write entries 1..LAST_GOOD, with a large entry at LARGE_AT.
+    for i in range(1, LAST_GOOD + 1):
+        key = f"key_{i:04d}".encode()
+        if i == LARGE_AT:
+            # Large value: repeat pattern to reach ~64KB
+            value = (f"value_{LARGE_AT:04d}_".encode() * (LARGE_SIZE_KB * 1024 // 10))
+        else:
+            value = f"value_{i:04d}".encode()
+        generator.put(key, value)
+    # Close the generator to flush and close the WAL file.
+    del generator
 
 recovered = Engine(data_dir=DATA_DIR)
 

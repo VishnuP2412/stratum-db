@@ -47,20 +47,7 @@ class SSTable:
         min_key = None
         max_key = None
         with open(path, 'rb') as file:
-            while True:
-                header = file.read(17)
-                if not header:
-                    break
-                if len(header) < 17:
-                    raise ValueError("Truncated SSTable header")
-                key_len, val_len, seq_no, deleted = struct.unpack(">IIQB", header)
-                key = file.read(key_len)
-                if len(key) < key_len:
-                    raise ValueError("Truncated SSTable key body")
-                value = file.read(val_len)
-                if len(value) < val_len:
-                    raise ValueError("Truncated SSTable value body")
-
+            for (key, value, seq_no, deleted) in SSTable.read_entries(file):
                 if min_key is None:
                     min_key = key
                 max_key = key
@@ -73,25 +60,33 @@ class SSTable:
             raise TypeError(f"SSTable.scan requires bytes end_key, got {type(end_key).__name__}")
         with open(self.path, 'rb') as file:
             results = []
-            seen_keys = set()
-            while True:
-                header = file.read(17)
-                if not header:
-                    break
-                if len(header) < 17:
-                    raise ValueError("Truncated SSTable header")
-                key_len, val_len, seq_no, deleted = struct.unpack(">IIQB", header)
-                key = file.read(key_len)
-                if len(key) < key_len:
-                    raise ValueError("Truncated SSTable key body")
-                value = file.read(val_len)
-                if len(value) < val_len:
-                    raise ValueError("Truncated SSTable value body")
-
-                if key in seen_keys:
-                    raise ValueError(f"Duplicate key {key!r} found in single SSTable file — invariant violated.")
-                seen_keys.add(key)
+            for (key, value, seq_no, deleted) in SSTable.read_entries(file):
 
                 if start_key <= key <= end_key:
                     results.append((key, value, seq_no, deleted))
         return results
+    
+    @staticmethod
+    def read_entries(file):
+        seen_keys = set()
+        while True:
+            header = file.read(17)
+            if not header:
+                return
+            if len(header) < 17:
+                raise ValueError("Truncated SSTable header")
+            key_len, val_len, seq_no, deleted = struct.unpack(">IIQB", header)
+            
+            key = file.read(key_len)
+            if len(key) < key_len:
+                raise ValueError("Truncated SSTable key body")
+            
+            value = file.read(val_len)
+            if len(value) < val_len:
+                raise ValueError("Truncated SSTable value body")
+            
+            if key in seen_keys:
+                raise ValueError(f"Duplicate key {key!r} found in single SSTable file — invariant violated.")
+            seen_keys.add(key)
+            
+            yield (key, value, seq_no, deleted)

@@ -5,6 +5,7 @@ from stratum.wal import WAL
 from stratum.sstable import SSTable
 from threading import RLock
 from pathlib import Path
+from sortedcontainers import SortedDict
 
 class Engine:
     def __init__(self, data_dir, table_dir=None):
@@ -91,3 +92,38 @@ class Engine:
                     return None if deleted else value
 
             return None
+
+    def compact(self):
+        entries = SortedDict()
+        for table in self.sstables:
+            table_entries = table.scan(table.min_key, table.max_key)
+            for key, val, seq_no, deleted in table_entries:
+                old = entries.get(key)
+                if old is None:
+                    entries[key] = (val, seq_no, deleted)
+                else:
+                    if seq_no > entries[key][1]:
+                        entries[key] = (val, seq_no, deleted)
+        del_keys = []
+        for key, entry in entries.items():
+            if entry[2]:
+                del_keys.append(key)
+        for key in del_keys:
+            del entries[key]
+        
+        path = self.table_dir / f"{self.tableCount:06d}_{uuid.uuid4().hex}.sst"
+        new_table = SSTable.flush(path, entries.items())
+
+        if new_table.min_key is None:
+            new_table.min_key = b""
+            new_table.max_key = b""
+
+        old_paths = [t.path for t in self.sstables]
+        for path in old_paths:
+            try:
+                Path(path).unlink()
+            except OSError as e:
+                print(f"Failed to delete {path}: {e}")
+
+        self.sstables = [new_table]
+        self.tableCount += 1

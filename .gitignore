@@ -1,11 +1,8 @@
 .venv/
-wal.log
-temp.py
-data/
-*.log
-tmp_*/
-crash_writer.py
 __pycache__
-data_manual_test/
 DEVELOPMENT.md
 Stratum Dev Roadmap.md
+handoff.md
+.pytest_cache/
+tests/data/
+tests/data_manual_test/

@@ -17,10 +17,9 @@ line for its chosen kill point appears.
 import sys
 import os
 from pathlib import Path
+
 # Ensure the project root is on the Python path when this script is executed
-# from the tests directory (e.g., via `python tests/DataWriter.py`).
-# This mirrors the behaviour of `pytest` which adds the repository root to
-# `sys.path` automatically.
+# from the tests directory (e.g., via `python tests/crash_writer.py`).
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.append(repo_root)
