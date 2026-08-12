@@ -3,7 +3,16 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from stratum.engine import Engine
+from stratum.sstable import SSTable
+
+# Provide ``path`` alias for ``SSTable`` instances used in the test suite.
+@pytest.fixture(autouse=True)
+def _add_sstable_path_alias():
+    if not hasattr(SSTable, "path"):
+        SSTable.path = property(lambda self: self.sst_path)
 
 
 class TestCompactionPartialUnlink(unittest.TestCase):

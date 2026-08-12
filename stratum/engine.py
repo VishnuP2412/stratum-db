@@ -1,5 +1,4 @@
 import re
-import uuid
 from stratum.memtable import MemTable
 from stratum.wal import WAL
 from stratum.sstable import SSTable
@@ -37,10 +36,14 @@ class Engine:
         self._load_sstables()
         self._recover()
 
+
     def _load_sstables(self):
-        for path in sorted(self.table_dir.glob("*.sst")):
-            self.sstables.append(SSTable.from_file(path))
-            match = re.match(r"^(\d+)_", path.name)
+        for sst_path in sorted(self.table_dir.glob("*.sst")):
+            idx_path = sst_path.with_suffix('.idx')
+            if not idx_path.exists():
+                raise FileNotFoundError(f"Could not find {idx_path}")
+            self.sstables.append(SSTable.from_file(sst_path, idx_path))
+            match = re.match(r"^(\d+)", sst_path.name)
             if match:
                 self.tableCount = max(self.tableCount, int(match.group(1)) + 1)
 
@@ -63,9 +66,8 @@ class Engine:
 
     def write_table(self):
         data = self.memtable.items()
-        path = self.table_dir / f"{self.tableCount:06d}_{uuid.uuid4().hex}.sst"
         self.tableCount += 1
-        new_sstable = SSTable.flush(path, data)
+        new_sstable = SSTable.flush(self.table_dir, self.tableCount, data)
         self.sstables.append(new_sstable)
         self.wal.truncate()
         self.memtable = MemTable()
@@ -86,7 +88,9 @@ class Engine:
             for sstable in reversed(self.sstables):
                 if sstable.min_key is not None and not (sstable.min_key <= key <= sstable.max_key):
                     continue
-                results = sstable.scan(key, key)
+                if not sstable.might_contain(key):
+                    continue
+                results = sstable.search(key)
                 if results:
                     _, value, _, deleted = results[0]
                     return None if deleted else value
@@ -110,20 +114,23 @@ class Engine:
                 del_keys.append(key)
         for key in del_keys:
             del entries[key]
-        
-        path = self.table_dir / f"{self.tableCount:06d}_{uuid.uuid4().hex}.sst"
-        new_table = SSTable.flush(path, entries.items())
+
+        self.tableCount += 1
+        new_table = SSTable.flush(self.table_dir, self.tableCount, entries.items())
 
         if new_table.min_key is None:
             new_table.min_key = b""
             new_table.max_key = b""
 
-        old_paths = [t.path for t in self.sstables]
-        for path in old_paths:
-            try:
-                Path(path).unlink()
-            except OSError as e:
-                print(f"Failed to delete {path}: {e}")
-
+        old_sst_paths = [t.sst_path for t in self.sstables]
+        old_idx_paths = [t.idx_path for t in self.sstables]
         self.sstables = [new_table]
-        self.tableCount += 1
+        for sst_path, idx_path in zip(old_sst_paths,old_idx_paths):
+            try:
+                Path(sst_path).unlink()
+            except OSError as e:
+                print(f"Failed to delete {sst_path}: {e}")
+            try:
+                Path(idx_path).unlink()
+            except OSError as e:
+                print(f"Failed to delete {idx_path}: {e}")

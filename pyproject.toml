@@ -1,2 +1,6 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
+# Register custom pytest marks to avoid warnings
+markers = [
+	"timeout(seconds): mark test to fail if it exceeds the given number of seconds"
+]

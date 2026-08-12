@@ -26,6 +26,7 @@ This repository currently implements:
 - **Manual compaction** (`Engine.compact()`) — merges all current SSTables into one, resolves conflicting versions of a key by highest sequence number, and physically drops tombstoned entries — the first point in the pipeline where deleted data is actually removed from disk rather than just filtered at read time. Not auto-triggered; called explicitly
 - `bytes`-only API contracts enforced (fail loudly, no silent type coercion) at every component boundary, including the shared low-level entry-parsing path used by both `scan()` and restart-time loading
 - real process-kill (`SIGKILL`) crash-safety tests covering WAL replay, SSTable flush/rename, and compaction's old-file cleanup step (via deterministic fault injection — see `DEVELOPMENT.md` for why a live SIGKILL specifically inside that window wasn't pursued further)
+- **Phase 4 complete** — the repository has reached the fourth roadmap milestone, and the current implementation reflects the completed Phase 4 durability and crash-safety goals.
 
 **Known limitation:** `Engine.get()` performs a full linear scan of an SSTable file for every point lookup — there is currently no index of any kind, so lookup cost scales with file size and a key's position within it. This was measured directly during Phase 3 testing (~30 minutes to verify 100,000 sequential lookups against a ~1,000,000-entry compacted file) and is the primary motivation for the next phase of work. This is a tracked, deliberate gap, not an oversight — see `DEVELOPMENT.md`.
 

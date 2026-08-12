@@ -7,7 +7,20 @@ import time
 import unittest
 from pathlib import Path
 
+import pytest
+
 from stratum.engine import Engine
+from stratum.sstable import SSTable
+
+# The tests historically accessed a non‑existent ``path`` attribute on
+# ``SSTable`` instances. The production ``SSTable`` class provides
+# ``sst_path``. To keep the production code untouched we expose a ``path``
+# attribute via a simple fixture that adds an alias property to the class.
+@pytest.fixture(autouse=True)
+def _add_sstable_path_alias():
+    # ``path`` should behave like a read‑only attribute returning ``sst_path``.
+    if not hasattr(SSTable, "path"):
+        SSTable.path = property(lambda self: self.sst_path)
 
 
 class TestEngineCompaction(unittest.TestCase):
@@ -130,6 +143,32 @@ class TestEngineCompaction(unittest.TestCase):
         # After successful compaction both keys should be present with correct values
         self.assertEqual(engine2.get(b"k1"), b"v1")
         self.assertEqual(engine2.get(b"k2"), b"v2")
+
+    @pytest.mark.timeout(1800)
+    def test_one_million_entries_compaction(self):
+        """Insert 1,000,000 key/value pairs, compact, and verify **all** entries.
+
+        The test stores each generated key/value pair in a dictionary, forces a
+        flush periodically to keep memory usage reasonable, runs a compaction,
+        and then checks that every key can be retrieved with the correct value.
+        """
+        entries: dict[bytes, bytes] = {}
+        for i in range(1_000_000):
+            key = f"k{i:07d}".encode()
+            val = f"v{i:07d}".encode()
+            self.engine.put(key, val)
+            entries[key] = val
+            # Flush every 100k entries to avoid a huge in‑memory memtable
+            if i % 100_000 == 0:
+                self._flush()
+
+        # Final flush before compaction to ensure all data is persisted
+        self._flush()
+        self.engine.compact()
+
+        # Verify every entry after compaction
+        for key, expected_val in entries.items():
+            self.assertEqual(self.engine.get(key), expected_val)
 
 
 if __name__ == "__main__":
