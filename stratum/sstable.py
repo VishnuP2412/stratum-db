@@ -7,7 +7,7 @@ import hashlib
 import math
 
 class SSTable:
-    def __init__(self, sst_path = None, idx_path = None, min_key = None, max_key = None,indexes = None, index_start = None, bloom_filter = None):
+    def __init__(self, sst_path = None, idx_path = None, min_key = None, max_key = None,indexes = None, index_start = None, bloom_filter = None, file_size_bytes = None, entry_count = None):
         if not isinstance(sst_path, Path):
             raise TypeError(
                 f"SSTable requires a pathlib.Path, got {type(sst_path).__name__}. "
@@ -25,6 +25,8 @@ class SSTable:
         self.indexes = indexes if indexes else []
         self.index_start = index_start
         self.bloom_filter = bloom_filter
+        self.file_size_bytes = file_size_bytes
+        self.entry_count = entry_count
 
     @classmethod
     def flush(cls, path, tableCount, memtable_items) -> SSTable:
@@ -42,7 +44,7 @@ class SSTable:
 
         memtable_items = list(memtable_items)
         number_of_entries = len(memtable_items)
-        filter = BloomFilter.for_size(number_of_entries, 0.02)
+        filter = BloomFilter.for_size(number_of_entries, 0.01)
         min_key = None
         max_key = None
         count = 0
@@ -80,7 +82,8 @@ class SSTable:
                 os.fsync(file.fileno())
 
         os.replace(tmp_sst_path, sst_path)
-        return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=pos, bloom_filter=filter)
+        file_size_bytes = os.path.getsize(sst_path)
+        return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=pos, bloom_filter=filter, file_size_bytes=file_size_bytes, entry_count = count)
 
     @classmethod
     def from_file(cls, sst_path, idx_path) -> SSTable:
@@ -98,6 +101,7 @@ class SSTable:
         min_key = None
         max_key = None
         indexes = []
+        file_size_bytes = os.path.getsize(sst_path)
         with open(idx_path,'rb') as file:
             index_start = struct.unpack('>I',file.read())[0]
 
@@ -134,11 +138,13 @@ class SSTable:
                     indexes.append((key, struct.unpack('>I',idx)[0]))
 
             file.seek(0, 0)
+            count = 0
             for (key, value, seq_no, deleted) in SSTable.read_entries(file, index_start):
                 if min_key is None:
                     min_key = key
                 max_key = key
-        return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=index_start,bloom_filter=filter)
+                count += 1
+        return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=index_start,bloom_filter=filter, file_size_bytes=file_size_bytes, entry_count=count)
 
 
     def might_contain(self, key):
@@ -239,7 +245,7 @@ class BloomFilter:
         return BloomFilter(number_of_bits=m,number_of_hashes=k,filterData=array)
 
     @classmethod
-    def for_size(cls, n, target_fpr = 0.02):
+    def for_size(cls, n, target_fpr = 0.01):
         if n <= 0:
             return BloomFilter(number_of_bits=1, number_of_hashes=1)
 

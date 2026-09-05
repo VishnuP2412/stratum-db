@@ -1,19 +1,14 @@
-# Ignore generated SSTable files and temporary data directories used in tests
-*.sst
-data/
-tmp/
-# Ignore the specific test script if desired (optional)
 tests/test_compact_10000.py.venv/
-__pycache__
 DEVELOPMENT.md
 Stratum Dev Roadmap.md
 handoff.md
 .pytest_cache/
 tests/data/
 tests/data_manual_test/
-data_manual_test/
 TEST_INVENTORY.md
 __pycache__/
 stratum/__pycache__/
 tests/__pycache__/
 .venv
+stratum/init_db.py
+STRATUM_PROJECT.md

@@ -2,14 +2,16 @@
 
 `stratum-db` is a write-optimized, crash-safe Python LSM-tree key-value engine.
 It implements a durable MemTable + WAL + SSTable storage stack with binary formats,
-crash recovery, compaction, and a growing roadmap toward bloom filters and gRPC.
+crash recovery, compaction, sparse indexes, Bloom filters, and a gRPC interface.
 
 ## What this repo contains
 
 - `stratum/engine.py` — the core `Engine` class that coordinates WAL, MemTable, SSTable files, and compaction
 - `stratum/wal.py` — write-ahead log with CRC-checked append and replay
 - `stratum/memtable.py` — in-memory sorted key-value store with tombstone support
-- `stratum/sstable.py` — immutable, sorted on-disk segment file format with range scan, restart-safe rediscovery, and shared entry-parsing
+- `stratum/sstable.py` — immutable, sorted on-disk segment file format with range scan, sparse indexes, Bloom filters, restart-safe rediscovery, and shared entry-parsing
+- `stratum/grpc/` — protobuf definition, generated stubs, and the gRPC server
+- `stratum/db.py` and `stratum/models.py` — optional PostgreSQL metadata integration for SSTables and compaction jobs
 - `tests/` — pytest coverage for WAL, MemTable, SSTable, recovery, compaction, and real SIGKILL crash-safety tests
 - `DEVELOPMENT.md` — design rationale, tradeoffs, and phase-by-phase decisions, including known gaps
 - `Stratum Dev Roadmap.md` — project scope, phased milestones, and ecosystem alignment
@@ -24,18 +26,25 @@ This repository currently implements:
 - **SSTable rediscovery on restart** — `Engine` rebuilds its full view of on-disk SSTables from a fresh directory scan at startup, so data flushed in a _previous_ process lifetime is visible again after a restart, not just WAL-replayed MemTable state
 - **Unambiguous tombstone handling across the MemTable/SSTable boundary** — `scan()` returns tombstones untouched (filtering is the caller's job), and `Engine.get()` stops at the first SSTable (newest-first) that has _any_ record for a key, live or deleted, so a delete correctly shadows an older value in an older file instead of being silently bypassed
 - **Manual compaction** (`Engine.compact()`) — merges all current SSTables into one, resolves conflicting versions of a key by highest sequence number, and physically drops tombstoned entries — the first point in the pipeline where deleted data is actually removed from disk rather than just filtered at read time. Not auto-triggered; called explicitly
+- **Sparse on-disk indexes and Bloom filters** — each SSTable stores a sparse key-to-offset index and a Bloom filter, and `Engine.get()` uses both to avoid unnecessary full-file searches
 - `bytes`-only API contracts enforced (fail loudly, no silent type coercion) at every component boundary, including the shared low-level entry-parsing path used by both `scan()` and restart-time loading
 - real process-kill (`SIGKILL`) crash-safety tests covering WAL replay, SSTable flush/rename, and compaction's old-file cleanup step (via deterministic fault injection — see `DEVELOPMENT.md` for why a live SIGKILL specifically inside that window wasn't pursued further)
-- **Phase 4 complete** — the repository has reached the fourth roadmap milestone, and the current implementation reflects the completed Phase 4 durability and crash-safety goals.
+- **gRPC `Get` and `Put` operations** — a standalone server is available through `stratum/grpc/server.py`; range `Scan` is not implemented yet
 
-**Known limitation:** `Engine.get()` performs a full linear scan of an SSTable file for every point lookup — there is currently no index of any kind, so lookup cost scales with file size and a key's position within it. This was measured directly during Phase 3 testing (~30 minutes to verify 100,000 sequential lookups against a ~1,000,000-entry compacted file) and is the primary motivation for the next phase of work. This is a tracked, deliberate gap, not an oversight — see `DEVELOPMENT.md`.
+**Known limitations:** compaction currently uses a naive full-materialize-then-sort merge rather than a tiered or streaming strategy, and it is manual rather than automatically triggered by a size or level threshold. These are deliberate next-stage tradeoffs; see `DEVELOPMENT.md`.
 
-Planned next work: bloom filters and a sparse on-disk index (to address the lookup-cost limitation above), gRPC, packaging.
+Metadata integration with PostgreSQL and Redis remains optional and is disabled by default (`METADATA_ENABLED=False`); standalone use requires neither service.
+
+Planned next work: `Scan`, gRPC server configuration and an explicit entrypoint, packaging, and Hypothesis-based tests.
 
 ## Requirements
 
 - Python 3.12+
 - `sortedcontainers`
+- `sqlalchemy`
+- `psycopg[binary]`
+- `grpcio`
+- `grpcio-tools`
 - `pytest`
 
 ## Installation
@@ -44,7 +53,7 @@ Planned next work: bloom filters and a sparse on-disk index (to address the look
 python -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install sortedcontainers pytest
+pip install sortedcontainers sqlalchemy 'psycopg[binary]' grpcio grpcio-tools pytest
 ```
 
 ## Example usage
@@ -63,6 +72,8 @@ engine.delete(b"user:1")
 engine.compact()
 ```
 
+Stratum also includes a standalone gRPC server with working `Get` and `Put` operations. gRPC `Scan` is planned but not implemented yet.
+
 ### Important API contracts
 
 - `Engine.put(key, value)` and `Engine.delete(key)` require `key`/`value` to be `bytes` — non-`bytes` input raises `TypeError` immediately, no silent conversion
@@ -80,13 +91,22 @@ stratum-db/
 ├── README.md
 ├── Stratum Dev Roadmap.md
 ├── pyproject.toml
+├── docker-compose.dev.yml
+├── TEST_INVENTORY.md
 ├── stratum/
 │   ├── __init__.py
-│   ├── api.py
+│   ├── db.py
 │   ├── engine.py
 │   ├── memtable.py
+│   ├── models.py
 │   ├── sstable.py
-│   └── wal.py
+│   ├── wal.py
+│   └── grpc/
+│       ├── __init__.py
+│       ├── server.py
+│       ├── stratum.proto
+│       ├── stratum_pb2.py
+│       └── stratum_pb2_grpc.py
 └── tests/
     ├── test_memtable.py
     ├── test_wal.py

@@ -19,14 +19,14 @@ def _make_items(keys, value_prefix="value", start_seq=1):
 
 
 def test_bloom_might_contain_returns_true_for_added_key():
-    filter = BloomFilter.for_size(10, 0.02)
+    filter = BloomFilter.for_size(10, 0.01)
     filter.add(b"alpha")
 
     assert filter.might_contain(b"alpha") is True
 
 
 def test_bloom_might_contain_returns_false_for_key_never_added():
-    filter = BloomFilter.for_size(10, 0.02)
+    filter = BloomFilter.for_size(10, 0.01)
     filter.add(b"alpha")
 
     assert filter.might_contain(b"beta") is False
@@ -34,7 +34,7 @@ def test_bloom_might_contain_returns_false_for_key_never_added():
 
 def test_bloom_false_positive_rate_stays_near_target_at_scale():
     n = 1000
-    filter = BloomFilter.for_size(n, 0.02)
+    filter = BloomFilter.for_size(n, 0.01)
     inserted_keys = [f"key_{idx:04d}".encode() for idx in range(n)]
     for key in inserted_keys:
         filter.add(key)
@@ -51,7 +51,7 @@ def test_bloom_false_positive_rate_stays_near_target_at_scale():
 
 
 def test_bloom_for_size_zero_entries_does_not_crash():
-    filter = BloomFilter.for_size(0, 0.02)
+    filter = BloomFilter.for_size(0, 0.01)
 
     assert isinstance(filter, BloomFilter)
     assert filter.bits_number >= 0
@@ -59,7 +59,7 @@ def test_bloom_for_size_zero_entries_does_not_crash():
 
 
 def test_bloom_for_size_produces_sane_m_and_k():
-    filter = BloomFilter.for_size(100, 0.02)
+    filter = BloomFilter.for_size(100, 0.01)
 
     assert filter.bits_number > 0
     assert filter.hashes_number > 0
@@ -68,7 +68,7 @@ def test_bloom_for_size_produces_sane_m_and_k():
 
 
 def test_bloom_restore_filter_matches_original_on_same_keys():
-    original = BloomFilter.for_size(10, 0.02)
+    original = BloomFilter.for_size(10, 0.01)
     keys = [b"alpha", b"beta", b"gamma"]
     for key in keys:
         original.add(key)
@@ -84,7 +84,7 @@ def test_bloom_restore_filter_matches_original_on_same_keys():
 
 
 def test_bloom_add_is_idempotent():
-    filter = BloomFilter.for_size(10, 0.02)
+    filter = BloomFilter.for_size(10, 0.01)
     filter.add(b"alpha")
     first_bits = bytes(filter.filter)
     filter.add(b"alpha")
