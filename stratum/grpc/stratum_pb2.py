@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rstratum.proto\x12\x07stratum\"\x19\n\nGetRequest\x12\x0b\n\x03key\x18\x01 \x01(\x0c\"+\n\x0bGetResponse\x12\r\n\x05value\x18\x01 \x01(\x0c\x12\r\n\x05\x66ound\x18\x02 \x01(\x08\"(\n\nPutRequest\x12\x0b\n\x03key\x18\x01 \x01(\x0c\x12\r\n\x05value\x18\x02 \x01(\x0c\"\x1e\n\x0bPutResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x32m\n\x07Stratum\x12\x30\n\x03Get\x12\x13.stratum.GetRequest\x1a\x14.stratum.GetResponse\x12\x30\n\x03Put\x12\x13.stratum.PutRequest\x1a\x14.stratum.PutResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rstratum.proto\x12\x07stratum\"\x19\n\nGetRequest\x12\x0b\n\x03key\x18\x01 \x01(\x0c\"+\n\x0bGetResponse\x12\r\n\x05value\x18\x01 \x01(\x0c\x12\r\n\x05\x66ound\x18\x02 \x01(\x08\"(\n\nPutRequest\x12\x0b\n\x03key\x18\x01 \x01(\x0c\x12\r\n\x05value\x18\x02 \x01(\x0c\"\x1e\n\x0bPutResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"1\n\x0bScanRequest\x12\x11\n\tstart_key\x18\x01 \x01(\x0c\x12\x0f\n\x07\x65nd_key\x18\x02 \x01(\x0c\"$\n\x06KVPair\x12\x0b\n\x03key\x18\x01 \x01(\x0c\x12\r\n\x05value\x18\x02 \x01(\x0c\x32\x9e\x01\n\x07Stratum\x12\x30\n\x03Get\x12\x13.stratum.GetRequest\x1a\x14.stratum.GetResponse\x12\x30\n\x03Put\x12\x13.stratum.PutRequest\x1a\x14.stratum.PutResponse\x12/\n\x04Scan\x12\x14.stratum.ScanRequest\x1a\x0f.stratum.KVPair0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,6 +39,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PUTREQUEST']._serialized_end=138
   _globals['_PUTRESPONSE']._serialized_start=140
   _globals['_PUTRESPONSE']._serialized_end=170
-  _globals['_STRATUM']._serialized_start=172
-  _globals['_STRATUM']._serialized_end=281
+  _globals['_SCANREQUEST']._serialized_start=172
+  _globals['_SCANREQUEST']._serialized_end=221
+  _globals['_KVPAIR']._serialized_start=223
+  _globals['_KVPAIR']._serialized_end=259
+  _globals['_STRATUM']._serialized_start=262
+  _globals['_STRATUM']._serialized_end=420
 # @@protoc_insertion_point(module_scope)

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Table, LargeBinary
 from sqlalchemy.orm import relationship
+
 from stratum.db import Base
 
 association_table = Table(

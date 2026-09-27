@@ -3,11 +3,14 @@ name = "stratum-db"
 version = "0.1.0"
 dependencies = [
     "sortedcontainers",
-    "sqlalchemy",
-    "psycopg[binary]",
-    "grpcio",
-    "grpcio-tools",
 ]
+
+[project.optional-dependencies]
+metadata = ["sqlalchemy", "psycopg[binary]"]
+server = ["grpcio", "grpcio-tools", "python-dotenv"]
+
+[tool.setuptools.packages.find]
+include = ["stratum*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

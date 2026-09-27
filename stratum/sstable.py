@@ -146,7 +146,6 @@ class SSTable:
                 count += 1
         return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=index_start,bloom_filter=filter, file_size_bytes=file_size_bytes, entry_count=count)
 
-
     def might_contain(self, key):
         return self.bloom_filter.might_contain(key)
 
@@ -154,7 +153,6 @@ class SSTable:
         offset_index = bisect.bisect_right(self.indexes,target, key=lambda x:x[0]) - 1
         offset = self.indexes[offset_index][1] if offset_index != -1 else 0
         return self.scan(target, target, offset)
-
 
     def scan(self, start_key, end_key, offset = None) -> list:
         if not isinstance(start_key, bytes):

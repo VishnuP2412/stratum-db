@@ -1,12 +1,15 @@
 import re
-from stratum.memtable import MemTable
-from stratum.wal import WAL
-from stratum.sstable import SSTable
 from threading import RLock
 from pathlib import Path
 from sortedcontainers import SortedDict
 from datetime import datetime, timezone
-from stratum.db import record_flush, record_compaction
+import heapq
+from itertools import groupby
+
+from stratum.memtable import MemTable
+from stratum.wal import WAL
+from stratum.sstable import SSTable
+from stratum import db
 
 class Engine:
     def __init__(self, data_dir, table_dir=None):
@@ -38,7 +41,6 @@ class Engine:
         self._load_sstables()
         self._recover()
 
-
     def _load_sstables(self):
         for sst_path in sorted(self.table_dir.glob("*.sst")):
             idx_path = sst_path.with_suffix('.idx')
@@ -65,20 +67,20 @@ class Engine:
             self.wal.append(self._seq_no, 1, key, value)
             self.memtable.put(key, value, self._seq_no)
 
-
     def write_table(self):
         data = self.memtable.items()
         self.tableCount += 1        
         new_sstable = SSTable.flush(self.table_dir, self.tableCount, data)
-        created_at = datetime.now(timezone.utc)
-        record_flush(
-            filename=new_sstable.sst_path.name,
-            min_key=new_sstable.min_key,
-            max_key=new_sstable.max_key,
-            entry_count=new_sstable.entry_count,
-            file_size_bytes=new_sstable.file_size_bytes,
-            created_at=created_at
-            )
+        if db.METADATA_ENABLED:
+            created_at = datetime.now(timezone.utc)
+            db.record_flush(
+                filename=new_sstable.sst_path.name,
+                min_key=new_sstable.min_key,
+                max_key=new_sstable.max_key,
+                entry_count=new_sstable.entry_count,
+                file_size_bytes=new_sstable.file_size_bytes,
+                created_at=created_at
+                )
         self.sstables.append(new_sstable)
         self.wal.truncate()
         self.memtable = MemTable()
@@ -108,63 +110,95 @@ class Engine:
 
             return None
 
+    def scan(self, start_key, end_key):
+        if start_key > end_key:
+            return
+        
+        with self.lock:
+            sstables = list(self.sstables)
+            memtable_items = self.memtable.items()
+
+        sources = []
+
+        for table in sstables:
+            if table.entry_count == 0:
+                continue
+
+            if table.max_key < start_key or table.min_key > end_key:
+                continue
+
+            sources.append(table.scan(start_key, end_key))
+
+        sources.append(
+            (key, value, seq_no, deleted) for key, (value, seq_no, deleted) in memtable_items if start_key <= key <= end_key
+        )
+
+        merged = heapq.merge(*sources, key = lambda entry: entry [0])
+
+        for key, entries in groupby(merged, key= lambda entry: entry[0]):
+            newest = max(entries, key = lambda entry: entry[2])
+            if not newest[3]:
+                yield key, newest[1]
+
     def compact(self):
-        started_at = datetime.now(timezone.utc)
-        entries = SortedDict()
-        input_filenames = []
-        for table in self.sstables:
-            input_filenames.append(table.sst_path.name)
-            table_entries = table.scan(table.min_key, table.max_key)
-            for key, val, seq_no, deleted in table_entries:
-                old = entries.get(key)
-                if old is None:
-                    entries[key] = (val, seq_no, deleted)
-                else:
-                    if seq_no > entries[key][1]:
+        with self.lock:
+            started_at = datetime.now(timezone.utc)
+            entries = SortedDict()
+            input_filenames = []
+            for table in self.sstables:
+                input_filenames.append(table.sst_path.name)
+                table_entries = table.scan(table.min_key, table.max_key)
+                for key, val, seq_no, deleted in table_entries:
+                    old = entries.get(key)
+                    if old is None:
                         entries[key] = (val, seq_no, deleted)
-        del_keys = []
-        for key, entry in entries.items():
-            if entry[2]:
-                del_keys.append(key)
-        for key in del_keys:
-            del entries[key]
+                    else:
+                        if seq_no > entries[key][1]:
+                            entries[key] = (val, seq_no, deleted)
+            del_keys = []
+            for key, entry in entries.items():
+                if entry[2]:
+                    del_keys.append(key)
+            for key in del_keys:
+                del entries[key]
 
-        self.tableCount += 1
-        created_at = datetime.now(timezone.utc)
-        new_table = SSTable.flush(self.table_dir, self.tableCount, entries.items())
+            self.tableCount += 1
+            created_at = datetime.now(timezone.utc)
+            new_table = SSTable.flush(self.table_dir, self.tableCount, entries.items())
 
-        
+            
 
-        if new_table.min_key is None:
-            new_table.min_key = b""
-            new_table.max_key = b""
-        
-        old_sst_paths = [t.sst_path for t in self.sstables]
-        old_idx_paths = [t.idx_path for t in self.sstables]
-        self.sstables = [new_table]
-        output_fields = {
-            'filename':new_table.sst_path.name,
-            'min_key':new_table.min_key,
-            'max_key':new_table.max_key,
-            'entry_count':new_table.entry_count,
-            'file_size_bytes':new_table.file_size_bytes,
-            'created_at':created_at
-        }
-        completed_at = datetime.now(timezone.utc)
-        record_compaction(
-            status="Completed",
-            started_at=started_at,
-            completed_at=completed_at,
-            tombstones_dropped=len(del_keys),
-            input_filenames=input_filenames,
-            output_fields=output_fields
-            )
-        for sst_path, idx_path in zip(old_sst_paths,old_idx_paths):
-            try:
-                Path(sst_path).unlink()
-            except OSError as e:
-                print(f"Failed to delete {sst_path}: {e}")
-            try:
-                Path(idx_path).unlink()
-            except OSError as e:
-                print(f"Failed to delete {idx_path}: {e}")
+            if new_table.min_key is None:
+                new_table.min_key = b""
+                new_table.max_key = b""
+            
+            old_sst_paths = [t.sst_path for t in self.sstables]
+            old_idx_paths = [t.idx_path for t in self.sstables]
+            self.sstables = [new_table]
+            output_fields = {
+                'filename':new_table.sst_path.name,
+                'min_key':new_table.min_key,
+                'max_key':new_table.max_key,
+                'entry_count':new_table.entry_count,
+                'file_size_bytes':new_table.file_size_bytes,
+                'created_at':created_at
+            }
+            if db.METADATA_ENABLED:
+                completed_at = datetime.now(timezone.utc)
+                db.record_compaction(
+                status="Completed",
+                started_at=started_at,
+                completed_at=completed_at,
+                tombstones_dropped=len(del_keys),
+                input_filenames=input_filenames,
+                output_fields=output_fields
+                )
+            for sst_path, idx_path in zip(old_sst_paths,old_idx_paths):
+                try:
+                    Path(sst_path).unlink()
+                except OSError as e:
+                    print(f"Failed to delete {sst_path}: {e}")
+                try:
+                    Path(idx_path).unlink()
+                except OSError as e:
+                    print(f"Failed to delete {idx_path}: {e}")

@@ -33,18 +33,16 @@ This repository currently implements:
 
 **Known limitations:** compaction currently uses a naive full-materialize-then-sort merge rather than a tiered or streaming strategy, and it is manual rather than automatically triggered by a size or level threshold. These are deliberate next-stage tradeoffs; see `DEVELOPMENT.md`.
 
-Metadata integration with PostgreSQL and Redis remains optional and is disabled by default (`METADATA_ENABLED=False`); standalone use requires neither service.
+PostgreSQL metadata writes are optional and disabled by default. Set `STRATUM_METADATA_ENABLED=true` to enable them and install the `metadata` extra. The core engine does not require SQLAlchemy or gRPC dependencies.
 
-Planned next work: `Scan`, gRPC server configuration and an explicit entrypoint, packaging, and Hypothesis-based tests.
+Planned next work: gRPC `Scan` and Hypothesis-based tests.
 
 ## Requirements
 
 - Python 3.12+
-- `sortedcontainers`
-- `sqlalchemy`
-- `psycopg[binary]`
-- `grpcio`
-- `grpcio-tools`
+- Core: `sortedcontainers`
+- Server extra: `grpcio`, `grpcio-tools`, and `python-dotenv`
+- Metadata extra: `sqlalchemy` and `psycopg[binary]`
 - `pytest`
 
 ## Installation
@@ -53,8 +51,17 @@ Planned next work: `Scan`, gRPC server configuration and an explicit entrypoint,
 python -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install sortedcontainers sqlalchemy 'psycopg[binary]' grpcio grpcio-tools pytest
+pip install -e .
 ```
+
+Install the optional server and metadata integrations only when needed:
+
+```bash
+pip install -e '.[server]'
+pip install -e '.[metadata]'
+```
+
+Runtime settings use the `STRATUM_*` environment-variable prefix. The gRPC entrypoint loads `.env` when `python-dotenv` is installed, while explicitly set process environment variables take precedence. `STRATUM_METADATA_ENABLED` defaults to `false`; accepted true values are `1`, `true`, `yes`, and `on` (case-insensitive), and accepted false values are `0`, `false`, `no`, and `off`.
 
 ## Example usage
 

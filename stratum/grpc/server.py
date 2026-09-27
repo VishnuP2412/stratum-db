@@ -19,17 +19,15 @@ class StratumServicer(stratum_pb2_grpc.StratumServicer):
         self.engine.put(request.key, request.value)
         return stratum_pb2.PutResponse(success=True)
 
+    def Scan(self, request, context):
+        for key, value in self.engine.scan(request.start_key, request.end_key):
+            yield stratum_pb2.KVPair(key=key, value=value)
 
-def serve():
-    engine = Engine(Path('./data'))
+def serve(data_dir, table_dir=None, port=50051):
+    engine = Engine(data_dir = data_dir, table_dir= table_dir)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
     stratum_pb2_grpc.add_StratumServicer_to_server(StratumServicer(engine), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port(f'[::]:{port}')
     server.start()
-    print("gRPC server running on port 50051")
+    print(f"gRPC server running on port {port}")
     server.wait_for_termination()
-
-
-
-if __name__ == "__main__":
-    serve()

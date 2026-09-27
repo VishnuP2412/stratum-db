@@ -1,12 +1,22 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+import os
 
 
-METADATA_ENABLED = True
+_metadata_enabled = os.environ.get("STRATUM_METADATA_ENABLED", "false").strip().lower()
+if _metadata_enabled not in {"1", "true", "yes", "on", "0", "false", "no", "off"}:
+    raise ValueError(
+        "STRATUM_METADATA_ENABLED must be a boolean value (true/false, 1/0, yes/no, or on/off)"
+    )
+METADATA_ENABLED = _metadata_enabled in {"1", "true", "yes", "on"}
 
 
-class Base(DeclarativeBase):
-    pass
+if METADATA_ENABLED:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import DeclarativeBase, sessionmaker
+
+    class Base(DeclarativeBase):
+        pass
+else:
+    Base = None
 
 
 def get_db_engine():
