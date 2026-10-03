@@ -105,6 +105,19 @@ def test_scan_suppresses_flushed_tombstone(tmp_path):
     assert scan(engine, b"a", b"a") == []
 
 
+def test_scan_suppresses_tombstone_from_newer_sstable(tmp_path):
+    engine = Engine(tmp_path)
+
+    engine.put(b"a", b"old")
+    engine.write_table()
+
+    engine.delete(b"a")
+    engine.write_table()
+
+    assert len(engine.sstables) == 2
+    assert scan(engine, b"a", b"a") == []
+
+
 def test_empty(tmp_path):
     engine = Engine(tmp_path)
 

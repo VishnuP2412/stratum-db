@@ -8,12 +8,15 @@ dependencies = [
 [project.optional-dependencies]
 metadata = ["sqlalchemy", "psycopg[binary]"]
 server = ["grpcio", "grpcio-tools", "python-dotenv"]
+dev = ["pytest"]
 
 [tool.setuptools.packages.find]
 include = ["stratum*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "-m 'not slow'"
 markers = [
-	"timeout(seconds): mark test to fail if it exceeds the given number of seconds"
+	"timeout(seconds): mark test to fail if it exceeds the given number of seconds",
+	"slow: mark tests that are excluded from the default suite"
 ]

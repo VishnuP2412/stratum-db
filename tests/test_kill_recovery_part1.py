@@ -7,7 +7,7 @@ import pytest
 from stratum.engine import Engine
 from stratum.wal import WAL
 
-CRASH_WRITER = Path(__file__).parent / "crash_writer.py"
+CRASH_WRITER = Path(__file__).parent / "compaction" / "crash_writer.py"
 
 
 @pytest.mark.parametrize("run", range(3))

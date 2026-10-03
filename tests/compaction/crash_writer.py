@@ -19,8 +19,8 @@ import os
 from pathlib import Path
 
 # Ensure the project root is on the Python path when this script is executed
-# from the tests directory (e.g., via `python tests/crash_writer.py`).
-repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# directly from its nested tests/compaction directory.
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if repo_root not in sys.path:
     sys.path.append(repo_root)
 

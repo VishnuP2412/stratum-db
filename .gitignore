@@ -13,3 +13,4 @@ STRATUM_PROJECT.md
 data/
 data_manual_test/
 .env
+stratum_db.egg-info/

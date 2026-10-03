@@ -144,6 +144,7 @@ class TestEngineCompaction(unittest.TestCase):
         self.assertEqual(engine2.get(b"k1"), b"v1")
         self.assertEqual(engine2.get(b"k2"), b"v2")
 
+    @pytest.mark.slow
     @pytest.mark.timeout(1800)
     def test_one_million_entries_compaction(self):
         """Insert 1,000,000 key/value pairs, compact, and verify **all** entries.

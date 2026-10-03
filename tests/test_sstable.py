@@ -522,7 +522,10 @@ def test_flush_removes_tmp_file_and_creates_final_sstable(tmp_path):
     sstable = SSTable.flush(table_dir, 1, items)
 
     assert sstable.sst_path.exists()
+    assert sstable.sst_path.parent == table_dir
+    assert sstable.idx_path.parent == table_dir
     assert not table_dir.joinpath("000001.sst.tmp").exists()
+    assert not table_dir.joinpath("000001.idx.tmp").exists()
     assert isinstance(sstable, SSTable)
 
 

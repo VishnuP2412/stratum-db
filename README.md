@@ -29,13 +29,14 @@ This repository currently implements:
 - **Sparse on-disk indexes and Bloom filters** — each SSTable stores a sparse key-to-offset index and a Bloom filter, and `Engine.get()` uses both to avoid unnecessary full-file searches
 - `bytes`-only API contracts enforced (fail loudly, no silent type coercion) at every component boundary, including the shared low-level entry-parsing path used by both `scan()` and restart-time loading
 - real process-kill (`SIGKILL`) crash-safety tests covering WAL replay, SSTable flush/rename, and compaction's old-file cleanup step (via deterministic fault injection — see `DEVELOPMENT.md` for why a live SIGKILL specifically inside that window wasn't pursued further)
-- **gRPC `Get` and `Put` operations** — a standalone server is available through `stratum/grpc/server.py`; range `Scan` is not implemented yet
+- **gRPC `Get`, `Put`, and streaming `Scan` operations** — a standalone server is available through `stratum/grpc/server.py`
 
 **Known limitations:** compaction currently uses a naive full-materialize-then-sort merge rather than a tiered or streaming strategy, and it is manual rather than automatically triggered by a size or level threshold. These are deliberate next-stage tradeoffs; see `DEVELOPMENT.md`.
 
 PostgreSQL metadata writes are optional and disabled by default. Set `STRATUM_METADATA_ENABLED=true` to enable them and install the `metadata` extra. The core engine does not require SQLAlchemy or gRPC dependencies.
+Docker is only needed if you choose to exercise the optional `metadata` extra against a local PostgreSQL instance; it is not part of the default setup or test run.
 
-Planned next work: gRPC `Scan` and Hypothesis-based tests.
+Planned next work: Hypothesis-based tests.
 
 ## Requirements
 
@@ -43,7 +44,7 @@ Planned next work: gRPC `Scan` and Hypothesis-based tests.
 - Core: `sortedcontainers`
 - Server extra: `grpcio`, `grpcio-tools`, and `python-dotenv`
 - Metadata extra: `sqlalchemy` and `psycopg[binary]`
-- `pytest`
+- Dev/test extra: `pytest`
 
 ## Installation
 
@@ -54,10 +55,10 @@ pip install -U pip
 pip install -e .
 ```
 
-Install the optional server and metadata integrations only when needed:
+Install the optional server, metadata, and test dependencies as needed:
 
 ```bash
-pip install -e '.[server]'
+pip install -e '.[server,dev]'
 pip install -e '.[metadata]'
 ```
 
@@ -79,12 +80,14 @@ engine.delete(b"user:1")
 engine.compact()
 ```
 
-Stratum also includes a standalone gRPC server with working `Get` and `Put` operations. gRPC `Scan` is planned but not implemented yet.
+Stratum also includes a standalone gRPC server with `Get`, `Put`, and streaming `Scan` operations.
 
 ### Important API contracts
 
 - `Engine.put(key, value)` and `Engine.delete(key)` require `key`/`value` to be `bytes` — non-`bytes` input raises `TypeError` immediately, no silent conversion
 - `Engine.get(key)` returns `bytes` or `None`
+- gRPC `Put`, `Get`, and `Scan` reject empty keys/bounds with `INVALID_ARGUMENT`; proto3's unset `bytes` fields otherwise arrive as `b""` and would silently target the same empty key
+- gRPC's default receive limit is approximately 4 MiB; larger requests receive `RESOURCE_EXHAUSTED` before reaching the engine
 - A `put()` call that happens to trigger a MemTable flush is **not durable** until that flush completes — if the process dies mid-flush, that specific write is lost (see `DEVELOPMENT.md` for the reasoning)
 - `Engine.compact()` is safe to interrupt at any point: a crash before the merged file is fully written leaves all original SSTables untouched; a crash after leaves the merged file and possibly some undeleted (but now redundant) originals — reads remain correct either way, since the newest file always wins on a shadowing conflict (see `DEVELOPMENT.md`, Phase 3)
 - WAL and SSTable files are persisted under the provided `data_dir` (SSTables optionally under a separate `table_dir`, defaulting to `data_dir` if not given)
@@ -124,11 +127,23 @@ stratum-db/
 
 ## Tests
 
-Run the full suite with:
+Run the default suite with:
 
 ```bash
 pytest
 ```
+
+The million-entry compaction check is marked `slow` and is excluded from the
+default run. Run it independently before v1.0:
+
+```bash
+pytest -m slow
+```
+
+Validation record: the full non-slow suite completed with metadata unset at
+`102 passed, 1 deselected`; a fresh-clone run of the pending tree completed at
+`106 passed, 1 deselected`; the independent million-entry run completed with
+`1 passed, 102 deselected` in 38:18. The latter was run at full scale.
 
 Includes real `kill -9` (`SIGKILL`) crash-injection tests — not simulated failure — for WAL replay and SSTable flush/truncate crash windows, plus deterministic fault-injection tests for compaction's old-file cleanup step.
 
