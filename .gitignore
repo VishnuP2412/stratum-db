@@ -14,3 +14,12 @@ data/
 data_manual_test/
 .env
 stratum_db.egg-info/
+*.whl
+dist/
+build/
+.hypothesis/
+bench_result.txt
+bench*
+demo_*
+demo/
+ui_data/

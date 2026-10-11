@@ -13,7 +13,7 @@ crash recovery, compaction, sparse indexes, Bloom filters, and a gRPC interface.
 - `stratum/grpc/` — protobuf definition, generated stubs, and the gRPC server
 - `stratum/db.py` and `stratum/models.py` — optional PostgreSQL metadata integration for SSTables and compaction jobs
 - `tests/` — pytest coverage for WAL, MemTable, SSTable, recovery, compaction, and real SIGKILL crash-safety tests
-- `DEVELOPMENT.md` — design rationale, tradeoffs, and phase-by-phase decisions, including known gaps
+- `STRATUM_PROJECT.md` — design rationale, tradeoffs, and phase-by-phase decisions, including known gaps
 - `Stratum Dev Roadmap.md` — project scope, phased milestones, and ecosystem alignment
 
 ## Status
@@ -28,25 +28,31 @@ This repository currently implements:
 - **Manual compaction** (`Engine.compact()`) — merges all current SSTables into one, resolves conflicting versions of a key by highest sequence number, and physically drops tombstoned entries — the first point in the pipeline where deleted data is actually removed from disk rather than just filtered at read time. Not auto-triggered; called explicitly
 - **Sparse on-disk indexes and Bloom filters** — each SSTable stores a sparse key-to-offset index and a Bloom filter, and `Engine.get()` uses both to avoid unnecessary full-file searches
 - `bytes`-only API contracts enforced (fail loudly, no silent type coercion) at every component boundary, including the shared low-level entry-parsing path used by both `scan()` and restart-time loading
-- real process-kill (`SIGKILL`) crash-safety tests covering WAL replay, SSTable flush/rename, and compaction's old-file cleanup step (via deterministic fault injection — see `DEVELOPMENT.md` for why a live SIGKILL specifically inside that window wasn't pursued further)
+- real process-kill (`SIGKILL`) crash-safety tests covering WAL replay, SSTable flush/rename, and compaction's old-file cleanup step (via deterministic fault injection — see `STRATUM_PROJECT.md` for why a live SIGKILL specifically inside that window wasn't pursued further)
 - **gRPC `Get`, `Put`, and streaming `Scan` operations** — a standalone server is available through `stratum/grpc/server.py`
 
-**Known limitations:** compaction currently uses a naive full-materialize-then-sort merge rather than a tiered or streaming strategy, and it is manual rather than automatically triggered by a size or level threshold. These are deliberate next-stage tradeoffs; see `DEVELOPMENT.md`.
+**Known limitations:** compaction currently uses a naive full-materialize-then-sort merge rather than a tiered or streaming strategy, and it is manual rather than automatically triggered by a size or level threshold. These are deliberate next-stage tradeoffs; see `STRATUM_PROJECT.md`.
 
 PostgreSQL metadata writes are optional and disabled by default. Set `STRATUM_METADATA_ENABLED=true` to enable them and install the `metadata` extra. The core engine does not require SQLAlchemy or gRPC dependencies.
 Docker is only needed if you choose to exercise the optional `metadata` extra against a local PostgreSQL instance; it is not part of the default setup or test run.
 
-Planned next work: Hypothesis-based tests.
+Phase 6 property-based tests are included in the development extra and cover
+WAL replay and compaction state preservation.
 
 ## Requirements
 
 - Python 3.12+
 - Core: `sortedcontainers`
 - Server extra: `grpcio`, `grpcio-tools`, and `python-dotenv`
+- Optional UI: `fastapi`, `uvicorn`, and `httpx2` (for UI tests)
 - Metadata extra: `sqlalchemy` and `psycopg[binary]`
 - Dev/test extra: `pytest`
 
 ## Installation
+
+For end-user installation from PyPI or GitHub, see
+[`INSTALLATION.md`](INSTALLATION.md). For deployment topologies and operational
+guidance, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ```bash
 python -m venv .venv
@@ -82,21 +88,74 @@ engine.compact()
 
 Stratum also includes a standalone gRPC server with `Get`, `Put`, and streaming `Scan` operations.
 
+### Optional local web UI
+
+Stratum includes an optional, offline browser UI for local administration. It
+uses a small FastAPI gateway with the embedded `Engine` and a static vanilla
+JavaScript frontend; there is no Node/npm or frontend build step.
+
+Install and run it from the repository root:
+
+```bash
+python -m pip install -r ui/requirements.txt
+STRATUM_UI_DATA_DIR=./ui_data python -m uvicorn ui.app:app --host 127.0.0.1 --port 8000
+```
+
+Then open <http://127.0.0.1:8000/>. The UI supports Put, Get, Delete, inclusive
+range scans, live WAL/MemTable/SSTable state, and manual compaction. It binds
+to localhost by default, has no authentication, and must be the only writer for
+its configured data directory; do not run it alongside `stratum-server` against
+the same directory. `STRATUM_UI_HOST`, `STRATUM_UI_PORT`, and
+`STRATUM_UI_DATA_DIR` configure the bind address, port, and data directory.
+
+The UI does not expose Flush because `Engine` has no public flush method. Values
+are limited to 1 MiB and scan limits to 1,000 rows. See
+[`ui/README.md`](ui/README.md) for the complete setup and operating guidance.
+
+The gRPC server can optionally expose Prometheus metrics without adding a
+runtime dependency. Set `STRATUM_METRICS_PORT` to an HTTP port to enable the
+`/metrics` endpoint; leave it unset for the smallest standalone deployment.
+The endpoint reports operation counters and current MemTable/SSTable gauges.
+
 ### Important API contracts
 
 - `Engine.put(key, value)` and `Engine.delete(key)` require `key`/`value` to be `bytes` — non-`bytes` input raises `TypeError` immediately, no silent conversion
 - `Engine.get(key)` returns `bytes` or `None`
 - gRPC `Put`, `Get`, and `Scan` reject empty keys/bounds with `INVALID_ARGUMENT`; proto3's unset `bytes` fields otherwise arrive as `b""` and would silently target the same empty key
 - gRPC's default receive limit is approximately 4 MiB; larger requests receive `RESOURCE_EXHAUSTED` before reaching the engine
-- A `put()` call that happens to trigger a MemTable flush is **not durable** until that flush completes — if the process dies mid-flush, that specific write is lost (see `DEVELOPMENT.md` for the reasoning)
-- `Engine.compact()` is safe to interrupt at any point: a crash before the merged file is fully written leaves all original SSTables untouched; a crash after leaves the merged file and possibly some undeleted (but now redundant) originals — reads remain correct either way, since the newest file always wins on a shadowing conflict (see `DEVELOPMENT.md`, Phase 3)
+- The gRPC channel is intentionally insecure and has no TLS or authentication in v1.0
+- `Engine.scan(start_key, end_key)` requires both inclusive byte bounds; open-ended scans are rejected
+- `Delete` is available on the in-process `Engine` API, but there is no Delete gRPC method in v1.0; adding it is deferred because it requires proto regeneration and compatibility review
+- A `put()` call that happens to trigger a MemTable flush is **not durable** until that flush completes — if the process dies mid-flush, that specific write is lost (see `STRATUM_PROJECT.md` for the reasoning)
+- `Engine.compact()` is safe to interrupt at any point: a crash before the merged file is fully written leaves all original SSTables untouched; a crash after leaves the merged file and possibly some undeleted (but now redundant) originals — reads remain correct either way, since the newest file always wins on a shadowing conflict (see `STRATUM_PROJECT.md`, Phase 3)
 - WAL and SSTable files are persisted under the provided `data_dir` (SSTables optionally under a separate `table_dir`, defaulting to `data_dir` if not given)
+
+## Phase 6 scope and deferred work
+
+Phase 6 adds property-based tests, optional Prometheus metrics, clean package
+metadata, and format documentation. The core package remains standalone and
+requires only `sortedcontainers`; gRPC and metrics are optional server
+capabilities.
+
+The following are deliberately deferred rather than silently omitted:
+
+- automatic or background compaction;
+- tiered/streaming compaction with a `heapq` merge;
+- write batching;
+- an outbox pattern for external event delivery;
+- PostgreSQL metadata and Redis Streams integration;
+- TLS, authentication, and multi-instance production hardening.
+
+See [`docs/WAL_FORMAT.md`](docs/WAL_FORMAT.md),
+[`docs/SSTABLE_FORMAT.md`](docs/SSTABLE_FORMAT.md), and
+[`docs/COMPACTION.md`](docs/COMPACTION.md) for the binary formats and
+compaction rationale.
 
 ## Project structure
 
 ```text
 stratum-db/
-├── DEVELOPMENT.md
+├── STRATUM_PROJECT.md
 ├── LICENSE
 ├── README.md
 ├── Stratum Dev Roadmap.md
@@ -154,8 +213,8 @@ Includes real `kill -9` (`SIGKILL`) crash-injection tests — not simulated fail
 - Tombstones are represented as deleted entries; `scan()` returns them untouched and callers decide what to do with them — `Engine.get()` treats the first hit (newest file first) as authoritative, `Engine.compact()` sees every tombstone across every file and uses that visibility to drop dead keys permanently
 - `Engine.get()` checks MemTable first, then falls back to SSTables newest-first, so a more recent write — or delete — always shadows an older one, across both in-memory and on-disk state
 - SSTable entry parsing (header unpack, truncation checks, duplicate-key integrity check) lives in one shared generator used by both `scan()` and restart-time file loading, so a corrupted file is caught consistently regardless of which path reads it first
-- `mmap` was deliberately not used for the WAL, despite being in the original project roadmap — chosen against in favor of plain `fsync()`-based writes to avoid `SIGBUS`-class risk on a correctness-critical path; see `DEVELOPMENT.md` for the full tradeoff
-- Compaction uses a naive full-materialize-then-sort merge rather than a streaming/heap-based k-way merge — a deliberate choice given measured data volumes at project scale, not a performance oversight; see `DEVELOPMENT.md`, Phase 3, for the tradeoff analysis
+- `mmap` was deliberately not used for the WAL, despite being in the original project roadmap — chosen against in favor of plain `fsync()`-based writes to avoid `SIGBUS`-class risk on a correctness-critical path; see `STRATUM_PROJECT.md` for the full tradeoff
+- Compaction uses a naive full-materialize-then-sort merge rather than a streaming/heap-based k-way merge — a deliberate choice given measured data volumes at project scale, not a performance oversight; see `STRATUM_PROJECT.md`, Phase 3, for the tradeoff analysis
 
 ## Contributing
 

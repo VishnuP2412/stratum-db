@@ -21,18 +21,19 @@ else:
 
 def get_db_engine():
     if METADATA_ENABLED:
-        db_engine = create_engine("postgresql+psycopg://stratum:stratum@localhost:5432/stratum",echo=True)
-        return db_engine
-    else:
-        return None
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url:
+            raise RuntimeError(
+                "DATABASE_URL must be set when STRATUM_METADATA_ENABLED is enabled"
+            )
+        return create_engine(database_url, echo=True)
+    return None
 
 def get_session_factory():
     db_engine = get_db_engine()
     if db_engine is not None:
-        SessionLocal = sessionmaker(bind=db_engine)
-        return SessionLocal
-    else:
-        return None
+        return sessionmaker(bind=db_engine)
+    return None
 
 def record_flush(filename, min_key, max_key, entry_count, file_size_bytes, created_at):
     session_factory = get_session_factory()
