@@ -23,3 +23,5 @@ bench*
 demo_*
 demo/
 ui_data/
+stratum/__pycache__
+ui/__init__.py

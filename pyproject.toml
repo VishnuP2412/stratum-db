@@ -1,14 +1,24 @@
 [project]
 name = "stratum-db"
 version = "0.1.0"
+description = "A standalone write-optimized LSM-tree key-value database"
+readme = "README.md"
+requires-python = ">=3.10"
 dependencies = [
     "sortedcontainers",
 ]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project.optional-dependencies]
 metadata = ["sqlalchemy", "psycopg[binary]"]
 server = ["grpcio", "grpcio-tools", "python-dotenv"]
-dev = ["pytest"]
+dev = ["pytest", "hypothesis"]
+
+[project.scripts]
+stratum-server = "stratum.api:main"
 
 [tool.setuptools.packages.find]
 include = ["stratum*"]

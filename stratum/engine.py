@@ -10,6 +10,7 @@ from stratum.memtable import MemTable
 from stratum.wal import WAL
 from stratum.sstable import SSTable
 from stratum import db
+from stratum.metrics import MetricsRegistry
 
 class Engine:
     def __init__(self, data_dir, table_dir=None):
@@ -37,9 +38,15 @@ class Engine:
         self.lock = RLock()
         self.sstables = []
         self.tableCount = 0
+        self.metrics = MetricsRegistry()
 
         self._load_sstables()
         self._recover()
+        self._update_metrics()
+
+    def _update_metrics(self):
+        self.metrics.set_gauge("sstables", len(self.sstables))
+        self.metrics.set_gauge("memtable_entries", len(self.memtable.items()))
 
     def _load_sstables(self):
         for sst_path in sorted(self.table_dir.glob("*.sst")):
@@ -60,12 +67,14 @@ class Engine:
                 self.memtable.delete(key, self._seq_no)
 
     def put(self, key, value):
+        self.metrics.increment("puts_total")
         with self.lock:
             if self.memtable.is_full():
                 self.write_table()
             self._seq_no += 1
             self.wal.append(self._seq_no, 1, key, value)
             self.memtable.put(key, value, self._seq_no)
+            self._update_metrics()
 
     def write_table(self):
         data = self.memtable.items()
@@ -84,14 +93,19 @@ class Engine:
         self.sstables.append(new_sstable)
         self.wal.truncate()
         self.memtable = MemTable()
+        self.metrics.increment("flushes_total")
+        self._update_metrics()
 
     def delete(self, key):
+        self.metrics.increment("deletes_total")
         with self.lock:
             self._seq_no += 1
             self.wal.append(self._seq_no, 2, key, b"")
             self.memtable.delete(key,self._seq_no)
+            self._update_metrics()
 
     def get(self, key):
+        self.metrics.increment("gets_total")
         with self.lock:
             record = self.memtable.get_record(key)
             if record is not None:
@@ -111,6 +125,7 @@ class Engine:
             return None
 
     def scan(self, start_key, end_key):
+        self.metrics.increment("scans_total")
         if start_key > end_key:
             return
         
@@ -141,6 +156,7 @@ class Engine:
                 yield key, newest[1]
 
     def compact(self):
+        self.metrics.increment("compactions_total")
         with self.lock:
             started_at = datetime.now(timezone.utc)
             entries = SortedDict()
