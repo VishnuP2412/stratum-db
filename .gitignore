@@ -20,6 +20,8 @@ build/
 .hypothesis/
 bench_result.txt
 bench*
+!benchmarks/
+!benchmarks/*.py
 demo_*
 demo/
 ui_data/

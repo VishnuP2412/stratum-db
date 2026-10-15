@@ -13,7 +13,7 @@ from stratum import db
 from stratum.metrics import MetricsRegistry
 
 class Engine:
-    def __init__(self, data_dir, table_dir=None):
+    def __init__(self, data_dir, table_dir=None, use_index=True, use_bloom=True):
         if not isinstance(data_dir, Path):
             raise TypeError(
                 f"WAL requires a pathlib.Path, got {type(data_dir).__name__}. "
@@ -29,6 +29,8 @@ class Engine:
 
         self.data_dir = data_dir
         self.table_dir = table_dir
+        self.use_index = use_index
+        self.use_bloom = use_bloom
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.table_dir.mkdir(parents=True, exist_ok=True)
 
@@ -53,7 +55,14 @@ class Engine:
             idx_path = sst_path.with_suffix('.idx')
             if not idx_path.exists():
                 raise FileNotFoundError(f"Could not find {idx_path}")
-            self.sstables.append(SSTable.from_file(sst_path, idx_path))
+            self.sstables.append(
+                SSTable.from_file(
+                    sst_path,
+                    idx_path,
+                    use_index=self.use_index,
+                    use_bloom=self.use_bloom,
+                )
+            )
             match = re.match(r"^(\d+)", sst_path.name)
             if match:
                 self.tableCount = max(self.tableCount, int(match.group(1)) + 1)

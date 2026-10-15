@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,6 +32,12 @@ def _get_config():
     return data_dir, table_dir, port, log_level
 
 def main():
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(
+            "usage: stratum-server [--help]\n\n"
+            "Start the Stratum DB gRPC server using STRATUM_* environment variables."
+        )
+        return
     data_dir, table_dir, port, log_level = _get_config()
     logging.basicConfig(level=log_level)
 

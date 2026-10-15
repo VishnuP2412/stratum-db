@@ -7,7 +7,7 @@ import hashlib
 import math
 
 class SSTable:
-    def __init__(self, sst_path = None, idx_path = None, min_key = None, max_key = None,indexes = None, index_start = None, bloom_filter = None, file_size_bytes = None, entry_count = None):
+    def __init__(self, sst_path = None, idx_path = None, min_key = None, max_key = None,indexes = None, index_start = None, bloom_filter = None, file_size_bytes = None, entry_count = None, use_index=True, use_bloom=True):
         if not isinstance(sst_path, Path):
             raise TypeError(
                 f"SSTable requires a pathlib.Path, got {type(sst_path).__name__}. "
@@ -27,6 +27,8 @@ class SSTable:
         self.bloom_filter = bloom_filter
         self.file_size_bytes = file_size_bytes
         self.entry_count = entry_count
+        self.use_index = use_index
+        self.use_bloom = use_bloom
 
     @classmethod
     def flush(cls, path, tableCount, memtable_items) -> SSTable:
@@ -86,7 +88,7 @@ class SSTable:
         return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=pos, bloom_filter=filter, file_size_bytes=file_size_bytes, entry_count = count)
 
     @classmethod
-    def from_file(cls, sst_path, idx_path) -> SSTable:
+    def from_file(cls, sst_path, idx_path, use_index=True, use_bloom=True) -> SSTable:
         if not isinstance(sst_path, Path):
             raise TypeError(
                 f"SSTable requires a pathlib.Path, got {type(sst_path).__name__}. "
@@ -144,12 +146,14 @@ class SSTable:
                     min_key = key
                 max_key = key
                 count += 1
-        return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=index_start,bloom_filter=filter, file_size_bytes=file_size_bytes, entry_count=count)
+        return SSTable(sst_path=sst_path, idx_path = idx_path, min_key=min_key, max_key=max_key,indexes=indexes, index_start=index_start,bloom_filter=filter, file_size_bytes=file_size_bytes, entry_count=count, use_index=use_index, use_bloom=use_bloom)
 
     def might_contain(self, key):
-        return self.bloom_filter.might_contain(key)
+        return not self.use_bloom or self.bloom_filter.might_contain(key)
 
     def search(self, target):
+        if not self.use_index:
+            return self.scan(target, target)
         offset_index = bisect.bisect_right(self.indexes,target, key=lambda x:x[0]) - 1
         offset = self.indexes[offset_index][1] if offset_index != -1 else 0
         return self.scan(target, target, offset)

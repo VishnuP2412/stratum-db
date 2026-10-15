@@ -9,23 +9,24 @@ crash recovery, compaction, sparse indexes, Bloom filters, and a gRPC interface.
 ## Performance
 
 Stratum DB is designed to make indexed point lookups practical at larger data
-volumes. A recorded run completed **100,000 lookups in approximately 30
-minutes** with the current implementation, which includes sparse on-disk indexes
-and Bloom filters to avoid unnecessary full-file searches.
+volumes. The reproducible benchmark in
+[`benchmarks/lookup.py`](benchmarks/lookup.py) builds a fixed one-million-entry
+dataset and runs 100,000 deterministic random lookups. The indexed path is
+compared with a deliberately unindexed path that disables both the sparse index
+and Bloom filter.
 
 | Workload | Result | Notes |
 |---|---:|---|
-| 100,000 point lookups, current indexed implementation | ~30 minutes | Recorded locally |
-| 100,000 point lookups, historical baseline | ~30 minutes | Historical result |
-| 1,000,000-entry compaction | 38:18 | Full-scale slow test |
+| 100,000 point lookups, indexed + Bloom filter | 32.56 s; p50 0.319 ms; p95 0.614 ms | Native WSL2 filesystem |
+| 100,000 point lookups, index + Bloom filter disabled | 312.43 s; p50 3.070 ms; p95 6.024 ms | Same dataset and query sequence |
+| 1,000,000-entry compaction | 38:18 (historical) | Mounted `D:` filesystem; not comparable to the lookup run |
 
-The current lookup result was recorded locally under WSL2 with Python 3.12.3
-on a 13th Gen Intel Core i5-13500H (8 cores, 16 threads), with 7.6 GiB
-available to the WSL environment. The data directory was on the mounted
-`D:` filesystem. The million-entry result was recorded with Python 3.12 on
-the same general local setup. Dataset parameters for the historical baseline
-and storage-device details were not standardized, so these figures should be
-treated as directional rather than as a cross-machine comparison.
+The lookup results were recorded under WSL2 on the native `/home/vishnu`
+filesystem with Python 3.12.3, a 13th Gen Intel Core i5-13500H (16 logical
+CPUs), and Linux 6.18.54.1-microsoft-standard-WSL2. The dataset contains
+1,000,000 entries, the query sequence uses seed `20261015`, and both modes
+execute the same 100,000 existing keys. Dataset construction is excluded from
+lookup timings.
 
 ## What this repo contains
 
@@ -67,7 +68,7 @@ WAL replay and compaction state preservation.
 - Python 3.12+
 - Core: `sortedcontainers`
 - Server extra: `grpcio`, `grpcio-tools`, and `python-dotenv`
-- Optional UI: `fastapi`, `uvicorn`, and `httpx2` (for UI tests)
+- Optional UI: `fastapi`, `uvicorn`, and `httpx` (for UI tests)
 - Metadata extra: `sqlalchemy` and `psycopg[binary]`
 - Dev/test extra: `pytest`
 
@@ -185,6 +186,12 @@ stratum-db/
 ├── pyproject.toml
 ├── docker-compose.dev.yml
 ├── TEST_INVENTORY.md
+├── benchmarks/
+│   └── lookup.py
+├── docs/
+│   ├── COMPACTION.md
+│   ├── SSTABLE_FORMAT.md
+│   └── WAL_FORMAT.md
 ├── stratum/
 │   ├── __init__.py
 │   ├── db.py
@@ -199,6 +206,10 @@ stratum-db/
 │       ├── stratum.proto
 │       ├── stratum_pb2.py
 │       └── stratum_pb2_grpc.py
+├── ui/
+│   ├── app.py
+│   ├── requirements.txt
+│   └── static/
 └── tests/
     ├── test_memtable.py
     ├── test_wal.py
@@ -223,9 +234,18 @@ pytest -m slow
 ```
 
 Validation record: the full non-slow suite completed with metadata unset at
-`102 passed, 1 deselected`; a fresh-clone run of the pending tree completed at
-`106 passed, 1 deselected`; the independent million-entry run completed with
-`1 passed, 102 deselected` in 38:18. The latter was run at full scale.
+`119 passed, 1 deselected`.
+
+Run the lookup benchmark on a native Linux/WSL filesystem with:
+
+```bash
+.venv/bin/python benchmarks/lookup.py \
+  --data-dir /home/$USER/.cache/stratum-db-benchmark
+```
+
+The benchmark reports total lookup time, p50/p95 per-lookup latency, dataset
+parameters, and machine details as JSON. Use `--keep-data` to reuse an existing
+dataset.
 
 Includes real `kill -9` (`SIGKILL`) crash-injection tests — not simulated failure — for WAL replay and SSTable flush/truncate crash windows, plus deterministic fault-injection tests for compaction's old-file cleanup step.
 

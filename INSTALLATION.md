@@ -6,9 +6,7 @@ supports an optional gRPC server and optional PostgreSQL metadata integration.
 
 ## Requirements
 
-- Python 3.10 or newer, as declared by the package metadata.
-- Python 3.12 or newer is recommended for the current development and test
-  environment.
+- Python 3.12 or newer, as declared by the package metadata.
 - Persistent filesystem storage for any data directory used outside a test.
 
 The core library requires only `sortedcontainers`. Server, metadata, and test
