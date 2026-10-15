@@ -6,6 +6,12 @@
 It implements a durable MemTable + WAL + SSTable storage stack with binary formats,
 crash recovery, compaction, sparse indexes, Bloom filters, and a gRPC interface.
 
+## Release status
+
+The project is complete through version **1.0.1**, which is the current release
+published on [PyPI](https://pypi.org/project/stratum-db/). It requires Python
+3.12 or newer.
+
 ## Performance
 
 Stratum DB is designed to make indexed point lookups practical at larger data
@@ -77,6 +83,14 @@ WAL replay and compaction state preservation.
 For end-user installation from PyPI or GitHub, see
 [`INSTALLATION.md`](INSTALLATION.md). For deployment topologies and operational
 guidance, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+Install the current PyPI release:
+
+```bash
+python -m pip install stratum-db==1.0.1
+```
+
+For development from a local checkout:
 
 ```bash
 python -m venv .venv
