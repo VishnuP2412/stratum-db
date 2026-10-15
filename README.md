@@ -9,19 +9,23 @@ crash recovery, compaction, sparse indexes, Bloom filters, and a gRPC interface.
 ## Performance
 
 Stratum DB is designed to make indexed point lookups practical at larger data
-volumes. A recorded pre-index benchmark took approximately **30 minutes for
-100,000 lookups**. The current implementation includes sparse on-disk indexes
-and Bloom filters to avoid unnecessary full-file searches; a directly comparable
-post-index lookup measurement is still pending.
+volumes. A recorded run completed **100,000 lookups in approximately 30
+minutes** with the current implementation, which includes sparse on-disk indexes
+and Bloom filters to avoid unnecessary full-file searches.
 
-| Workload | Recorded result | Notes |
+| Workload | Result | Notes |
 |---|---:|---|
-| 100,000 point lookups, pre-index implementation | ~30 minutes | Historical baseline |
+| 100,000 point lookups, current indexed implementation | ~30 minutes | Recorded locally |
+| 100,000 point lookups, historical baseline | ~30 minutes | Historical result |
 | 1,000,000-entry compaction | 38:18 | Full-scale slow test |
 
-The million-entry result was recorded with Python 3.12. Hardware, dataset
-parameters, and a comparable post-index lookup result should be recorded before
-using these figures as a cross-machine performance comparison.
+The current lookup result was recorded locally under WSL2 with Python 3.12.3
+on a 13th Gen Intel Core i5-13500H (8 cores, 16 threads), with 7.6 GiB
+available to the WSL environment. The data directory was on the mounted
+`D:` filesystem. The million-entry result was recorded with Python 3.12 on
+the same general local setup. Dataset parameters for the historical baseline
+and storage-device details were not standardized, so these figures should be
+treated as directional rather than as a cross-machine comparison.
 
 ## What this repo contains
 
