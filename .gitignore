@@ -26,3 +26,4 @@ ui_data/
 stratum/__pycache__
 ui/__init__.py
 STRATUM_PROJECT.md
+examples/

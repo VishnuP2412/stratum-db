@@ -1,8 +1,27 @@
 # Stratum DB
 
+[![Tests](https://github.com/VishnuP2412/stratum-db/actions/workflows/tests.yml/badge.svg)](https://github.com/VishnuP2412/stratum-db/actions/workflows/tests.yml)
+
 `stratum-db` is a write-optimized, crash-safe Python LSM-tree key-value engine.
 It implements a durable MemTable + WAL + SSTable storage stack with binary formats,
 crash recovery, compaction, sparse indexes, Bloom filters, and a gRPC interface.
+
+## Performance
+
+Stratum DB is designed to make indexed point lookups practical at larger data
+volumes. A recorded pre-index benchmark took approximately **30 minutes for
+100,000 lookups**. The current implementation includes sparse on-disk indexes
+and Bloom filters to avoid unnecessary full-file searches; a directly comparable
+post-index lookup measurement is still pending.
+
+| Workload | Recorded result | Notes |
+|---|---:|---|
+| 100,000 point lookups, pre-index implementation | ~30 minutes | Historical baseline |
+| 1,000,000-entry compaction | 38:18 | Full-scale slow test |
+
+The million-entry result was recorded with Python 3.12. Hardware, dataset
+parameters, and a comparable post-index lookup result should be recorded before
+using these figures as a cross-machine performance comparison.
 
 ## What this repo contains
 
@@ -193,7 +212,7 @@ pytest
 ```
 
 The million-entry compaction check is marked `slow` and is excluded from the
-default run. Run it independently before v1.0:
+default run. Run it independently when validating full-scale performance:
 
 ```bash
 pytest -m slow
